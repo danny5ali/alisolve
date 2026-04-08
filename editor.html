@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Clip Studio — Video Editing Dashboard</title>
+  <link rel="stylesheet" href="editor.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>Clip Studio</h1>
+        <p class="subtitle">Upload. Clip. Caption. Ship.</p>
+      </div>
+
+      <nav class="tabs">
+        <button class="tab active" data-panel="source">1. Source</button>
+        <button class="tab" data-panel="clipping">2. Clipping</button>
+        <button class="tab" data-panel="platform">3. Platform</button>
+        <button class="tab" data-panel="captions">4. Captions</button>
+        <button class="tab" data-panel="style">5. Font &amp; Style</button>
+        <button class="tab" data-panel="animations">6. Animations</button>
+        <button class="tab" data-panel="lut">7. LUT</button>
+        <button class="tab" data-panel="export">8. Export</button>
+      </nav>
+
+      <div class="engine-status">
+        <span class="dot" id="engineDot"></span>
+        <span id="engineLabel">Loading engine…</span>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <!-- PREVIEW -->
+      <section class="preview-wrap">
+        <div class="preview-stage" id="previewStage">
+          <video id="previewVideo" controls playsinline></video>
+          <div class="caption-overlay" id="captionOverlay"></div>
+          <div class="preview-empty" id="previewEmpty">
+            <div>
+              <h2>No footage loaded</h2>
+              <p>Upload raw footage in the Source panel to begin.</p>
+            </div>
+          </div>
+        </div>
+        <div class="preview-meta" id="previewMeta"></div>
+      </section>
+
+      <!-- PANELS -->
+      <section class="panels">
+        <!-- SOURCE -->
+        <div class="panel active" data-panel="source">
+          <h2>Source Footage</h2>
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept="video/*" hidden />
+            <div>
+              <strong>Drop raw footage here</strong>
+              <span>or click to browse — MP4, MOV, WebM, MKV</span>
+            </div>
+          </label>
+          <div id="sourceInfo" class="info"></div>
+        </div>
+
+        <!-- CLIPPING -->
+        <div class="panel" data-panel="clipping">
+          <h2>Auto Clipping</h2>
+          <div class="field">
+            <label>Mode</label>
+            <select id="clipMode">
+              <option value="fixed">Fixed length</option>
+              <option value="range">Random within range</option>
+              <option value="scene">Scene detection</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Min duration (sec)</label>
+              <input type="number" id="clipMin" min="30" max="600" value="30" />
+            </div>
+            <div class="field">
+              <label>Max duration (sec)</label>
+              <input type="number" id="clipMax" min="30" max="600" value="60" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Scene threshold (0.1–0.6) — used only in scene mode</label>
+            <input type="number" id="sceneThresh" min="0.1" max="0.9" step="0.05" value="0.35" />
+          </div>
+          <p class="hint">Clips are forced into the 30s–10m window regardless of other settings.</p>
+        </div>
+
+        <!-- PLATFORM -->
+        <div class="panel" data-panel="platform">
+          <h2>Target Platform</h2>
+          <div class="platform-grid">
+            <label class="platform-card">
+              <input type="radio" name="platform" value="youtube" checked />
+              <div>
+                <strong>YouTube</strong>
+                <span>16:9 · 1920×1080 · 30fps</span>
+              </div>
+            </label>
+            <label class="platform-card">
+              <input type="radio" name="platform" value="tiktok" />
+              <div>
+                <strong>TikTok</strong>
+                <span>9:16 · 1080×1920 · 30fps</span>
+              </div>
+            </label>
+            <label class="platform-card">
+              <input type="radio" name="platform" value="reels" />
+              <div>
+                <strong>Instagram Reels</strong>
+                <span>9:16 · 1080×1920 · 30fps</span>
+              </div>
+            </label>
+            <label class="platform-card">
+              <input type="radio" name="platform" value="shorts" />
+              <div>
+                <strong>YouTube Shorts</strong>
+                <span>9:16 · 1080×1920 · 30fps</span>
+              </div>
+            </label>
+            <label class="platform-card">
+              <input type="radio" name="platform" value="square" />
+              <div>
+                <strong>Square</strong>
+                <span>1:1 · 1080×1080 · 30fps</span>
+              </div>
+            </label>
+          </div>
+          <div class="field">
+            <label>Crop focus</label>
+            <select id="cropFocus">
+              <option value="center">Center</option>
+              <option value="top">Top</option>
+              <option value="bottom">Bottom</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- CAPTIONS -->
+        <div class="panel" data-panel="captions">
+          <h2>Auto Captions</h2>
+          <div class="field checkbox">
+            <label>
+              <input type="checkbox" id="captionsEnabled" checked />
+              Generate &amp; burn auto captions
+            </label>
+          </div>
+          <div class="field">
+            <label>Engine</label>
+            <select id="captionEngine">
+              <option value="whisper">Whisper (in-browser, ~40MB model)</option>
+              <option value="manual">Manual transcript</option>
+            </select>
+          </div>
+          <div class="field">
+            <button class="btn" id="generateCaptionsBtn">Generate captions now</button>
+            <span id="captionProgress" class="muted"></span>
+          </div>
+          <div class="field">
+            <label>Transcript (editable, synced to preview)</label>
+            <textarea id="transcript" rows="8" placeholder="Captions will appear here. Edit timestamps as [00:01.00 --> 00:03.50] Your line here"></textarea>
+          </div>
+          <p class="hint">Captions appear live over the preview and are burned into each exported clip.</p>
+        </div>
+
+        <!-- STYLE -->
+        <div class="panel" data-panel="style">
+          <h2>Font &amp; Placement</h2>
+          <div class="row">
+            <div class="field">
+              <label>Font family</label>
+              <select id="fontFamily">
+                <option value="Inter">Inter</option>
+                <option value="Impact">Impact</option>
+                <option value="Montserrat">Montserrat</option>
+                <option value="Bebas Neue">Bebas Neue</option>
+                <option value="Arial Black">Arial Black</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Georgia">Georgia</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Size</label>
+              <input type="number" id="fontSize" min="16" max="120" value="48" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Color</label>
+              <input type="color" id="fontColor" value="#ffffff" />
+            </div>
+            <div class="field">
+              <label>Stroke color</label>
+              <input type="color" id="strokeColor" value="#000000" />
+            </div>
+            <div class="field">
+              <label>Stroke width</label>
+              <input type="number" id="strokeWidth" min="0" max="10" value="3" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Weight</label>
+              <select id="fontWeight">
+                <option value="400">Regular</option>
+                <option value="700" selected>Bold</option>
+                <option value="900">Black</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Transform</label>
+              <select id="fontCase">
+                <option value="none">As written</option>
+                <option value="upper">UPPERCASE</option>
+                <option value="lower">lowercase</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Placement</label>
+            <select id="captionPlacement">
+              <option value="bottom">Bottom third</option>
+              <option value="center">Center</option>
+              <option value="top">Top third</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Horizontal offset (%)</label>
+            <input type="range" id="captionOffsetX" min="-40" max="40" value="0" />
+          </div>
+          <div class="field">
+            <label>Vertical offset (%)</label>
+            <input type="range" id="captionOffsetY" min="-40" max="40" value="0" />
+          </div>
+        </div>
+
+        <!-- ANIMATIONS -->
+        <div class="panel" data-panel="animations">
+          <h2>Animations</h2>
+          <div class="field">
+            <label>Caption entrance</label>
+            <select id="animEntrance">
+              <option value="none">None</option>
+              <option value="fade">Fade in</option>
+              <option value="slide-up">Slide up</option>
+              <option value="pop">Pop</option>
+              <option value="typewriter">Typewriter</option>
+              <option value="karaoke">Karaoke highlight</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Clip entrance</label>
+            <select id="clipEntrance">
+              <option value="none">None</option>
+              <option value="fade">Fade from black</option>
+              <option value="zoom">Zoom in</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Clip exit</label>
+            <select id="clipExit">
+              <option value="none">None</option>
+              <option value="fade">Fade to black</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Animation speed</label>
+            <select id="animSpeed">
+              <option value="fast">Fast (0.2s)</option>
+              <option value="medium" selected>Medium (0.4s)</option>
+              <option value="slow">Slow (0.8s)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- LUT -->
+        <div class="panel" data-panel="lut">
+          <h2>Color Grade (LUT)</h2>
+          <label class="dropzone small" id="lutDrop">
+            <input type="file" id="lutInput" accept=".cube,.CUBE" hidden />
+            <div>
+              <strong>Import .cube LUT</strong>
+              <span>or click to browse</span>
+            </div>
+          </label>
+          <div id="lutInfo" class="info"></div>
+          <div class="field">
+            <label>Intensity (%)</label>
+            <input type="range" id="lutIntensity" min="0" max="100" value="100" />
+          </div>
+          <div class="field checkbox">
+            <label>
+              <input type="checkbox" id="lutEnabled" />
+              Apply LUT on export
+            </label>
+          </div>
+        </div>
+
+        <!-- EXPORT -->
+        <div class="panel" data-panel="export">
+          <h2>Export</h2>
+          <div class="field">
+            <label>Output format</label>
+            <select id="outFormat">
+              <option value="mp4">MP4 (H.264 + AAC)</option>
+              <option value="webm">WebM (VP9 + Opus)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Quality (CRF — lower is better)</label>
+            <input type="number" id="outCrf" min="16" max="32" value="23" />
+          </div>
+          <div class="field">
+            <label>Filename prefix</label>
+            <input type="text" id="outPrefix" value="clip" />
+          </div>
+          <button class="btn primary" id="exportBtn">Render &amp; Download Clips</button>
+          <div id="renderLog" class="log"></div>
+          <div id="renderResults" class="results"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="editor.js"></script>
+</body>
+</html>
