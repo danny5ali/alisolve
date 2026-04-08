@@ -474,4 +474,105 @@ async function renderClips() {
     const ffmpeg = state.ffmpeg;
     const preset = PLATFORM_PRESETS[getPlatform()];
     const clips = planClips();
-    log(`Planned ${clips.length} clip(s) for
+        log(`Planned ${clips.length} clip(s) for ${preset.label}`);
+
+    // Write source
+    log("Loading source into engine…");
+    await ffmpeg.writeFile("input.bin", await fetchFile(state.sourceFile));
+
+    // Write LUT if present
+    const hasLut = $("lutEnabled").checked && state.lutFile;
+    const lutIntensity = parseInt($("lutIntensity").value, 10);
+    if (hasLut) {
+      log(`Loading LUT: ${state.lutName}`);
+      await ffmpeg.writeFile("lut.cube", await fetchFile(state.lutFile));
+    }
+
+    const format = $("outFormat").value;
+    const crf = parseInt($("outCrf").value, 10) || 23;
+    const prefix = ($("outPrefix").value || "clip").replace(/[^a-z0-9_-]/gi, "_");
+    const useCaptions = $("captionsEnabled").checked && state.captions.length > 0;
+
+    for (let i = 0; i < clips.length; i++) {
+      const c = clips[i];
+      const dur = c.end - c.start;
+      log(`\n[${i + 1}/${clips.length}] Rendering ${c.start.toFixed(1)}s → ${c.end.toFixed(1)}s (${dur.toFixed(1)}s)`);
+
+      // Write ASS if needed
+      if (useCaptions) {
+        const ass = buildAssFile(state.captions, c.start, c.end, preset);
+        await ffmpeg.writeFile("subs.ass", new TextEncoder().encode(ass));
+      }
+
+      // Build filter, replace MAX_END for fade-out
+      let filter = buildFilterChain(preset, useCaptions, hasLut, lutIntensity);
+      const fadeOutStart = Math.max(0, dur - ({ fast: 0.2, medium: 0.4, slow: 0.8 }[$("animSpeed").value] || 0.4));
+      filter = filter.replace("MAX_END", fadeOutStart.toFixed(2));
+
+      const outName = format === "webm"
+        ? `${prefix}_${String(i + 1).padStart(2, "0")}.webm`
+        : `${prefix}_${String(i + 1).padStart(2, "0")}.mp4`;
+
+      const args = [
+        "-ss", c.start.toFixed(3),
+        "-i", "input.bin",
+        "-t", dur.toFixed(3),
+        "-vf", filter,
+        "-r", String(preset.fps),
+      ];
+
+      if (format === "mp4") {
+        args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", String(crf),
+                  "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart");
+      } else {
+        args.push("-c:v", "libvpx-vp9", "-crf", String(crf), "-b:v", "0",
+                  "-c:a", "libopus", "-b:a", "128k");
+      }
+      args.push("-y", outName);
+
+      try {
+        await ffmpeg.exec(args);
+        const data = await ffmpeg.readFile(outName);
+        const blob = new Blob([data.buffer], { type: format === "mp4" ? "video/mp4" : "video/webm" });
+        addResult(outName, blob);
+        log(`  ✓ ${outName} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+        try { ffmpeg.deleteFile(outName); } catch {}
+      } catch (err) {
+        log(`  ✗ Failed clip ${i + 1}: ${err.message || err}`);
+      }
+    }
+
+    try { ffmpeg.deleteFile("input.bin"); } catch {}
+    if (hasLut) try { ffmpeg.deleteFile("lut.cube"); } catch {}
+    log("\nDone.");
+  } catch (e) {
+    console.error(e);
+    log("Fatal: " + (e.message || e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function addResult(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const item = document.createElement("div");
+  item.className = "result-item";
+  item.innerHTML = `
+    <a href="${url}" download="${name}">${name}</a>
+    <span class="size">${(blob.size / 1024 / 1024).toFixed(2)} MB</span>
+  `;
+  $("renderResults").appendChild(item);
+}
+
+function getPlatform() {
+  const el = document.querySelector('input[name="platform"]:checked');
+  return el ? el.value : "youtube";
+}
+
+// When platform changes, reshape preview aspect ratio
+document.querySelectorAll('input[name="platform"]').forEach((r) => {
+  r.addEventListener("change", () => {
+    const p = PLATFORM_PRESETS[getPlatform()];
+    $("previewStage").style.aspectRatio = `${p.w}/${p.h}`;
+  });
+});
